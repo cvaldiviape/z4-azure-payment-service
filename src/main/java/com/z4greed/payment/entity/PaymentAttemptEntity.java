@@ -7,7 +7,9 @@ import lombok.*;
 @Entity
 @Table(name = "payment_attempts")
 @Getter
+@Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class PaymentAttemptEntity {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -18,13 +20,4 @@ public class PaymentAttemptEntity {
   private String result;
   private String errorMessage;
   private Instant createdAt;
-
-  @Builder
-  public PaymentAttemptEntity(PaymentEntity payment) {
-    this.paymentId = payment.getPaymentId();
-    this.attemptNumber = 1;
-    this.result = payment.getStatus().name();
-    this.errorMessage = payment.getFailureReason();
-    this.createdAt = Instant.now();
-  }
 }

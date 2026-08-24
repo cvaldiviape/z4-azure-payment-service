@@ -16,4 +16,5 @@ public class PaymentEventConsumer {
   public void consume(String rawEvent) {
     this.paymentService.process(rawEvent);
   }
+
 }
