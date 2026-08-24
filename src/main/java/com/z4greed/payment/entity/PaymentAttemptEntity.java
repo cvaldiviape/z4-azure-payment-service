@@ -1,7 +1,7 @@
 package com.z4greed.payment.entity;
 
 import jakarta.persistence.*;
-import java.time.Instant;
+import java.time.LocalDateTime;
 import lombok.*;
 
 @Entity
@@ -16,8 +16,8 @@ public class PaymentAttemptEntity {
   private Long id;
 
   private String paymentId;
-  private int attemptNumber;
+  private Integer attemptNumber;
   private String result;
   private String errorMessage;
-  private Instant createdAt;
+  private LocalDateTime createdAt;
 }

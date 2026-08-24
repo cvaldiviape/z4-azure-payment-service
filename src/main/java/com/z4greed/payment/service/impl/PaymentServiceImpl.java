@@ -14,7 +14,7 @@ import com.z4greed.payment.mapper.*;
 import com.z4greed.payment.repository.*;
 import com.z4greed.payment.service.PaymentService;
 import java.math.BigDecimal;
-import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -79,13 +79,13 @@ public class PaymentServiceImpl implements PaymentService {
     }
   }
 
-  private boolean shouldIgnore(EventEnvelopeDto eventEnvelopeDto) {
-    boolean isPaymentRequest = EventTypeEnum.PAYMENT_REQUESTED.getValue().equals(eventEnvelopeDto.eventType());
-    boolean wasProcessed = this.processedEventRepository.existsById(eventEnvelopeDto.eventId());
+  private Boolean shouldIgnore(EventEnvelopeDto eventEnvelopeDto) {
+    Boolean isPaymentRequest = EventTypeEnum.PAYMENT_REQUESTED.getValue().equals(eventEnvelopeDto.eventType());
+    Boolean wasProcessed = this.processedEventRepository.existsById(eventEnvelopeDto.eventId());
     return !isPaymentRequest || wasProcessed;
   }
 
-  private boolean paymentExists(EventEnvelopeDto eventEnvelopeDto) {
+  private Boolean paymentExists(EventEnvelopeDto eventEnvelopeDto) {
     Long orderId = Long.valueOf(eventEnvelopeDto.aggregateId());
     return this.paymentRepository.findByOrderId(orderId).isPresent();
   }
@@ -98,7 +98,7 @@ public class PaymentServiceImpl implements PaymentService {
 
   private PaymentCreateDto createPaymentDto(EventEnvelopeDto eventEnvelopeDto) {
     String paymentToken = eventEnvelopeDto.payload().get("paymentToken").asText();
-    boolean approved = APPROVED_TOKEN.equals(paymentToken);
+    Boolean approved = APPROVED_TOKEN.equals(paymentToken);
     PaymentStatusEnum status = approved ? PaymentStatusEnum.APPROVED : PaymentStatusEnum.FAILED;
     String failureReason = approved ? null : FAILURE_REASON;
     Long orderId = Long.valueOf(eventEnvelopeDto.aggregateId());
@@ -114,7 +114,7 @@ public class PaymentServiceImpl implements PaymentService {
         .currency(currency)
         .status(status)
         .failureReason(failureReason)
-        .createdAt(Instant.now())
+        .createdAt(LocalDateTime.now())
         .build();
   }
 
@@ -124,7 +124,7 @@ public class PaymentServiceImpl implements PaymentService {
         .attemptNumber(1)
         .result(paymentEntity.getStatus().name())
         .errorMessage(paymentEntity.getFailureReason())
-        .createdAt(Instant.now())
+        .createdAt(LocalDateTime.now())
         .build();
     PaymentAttemptEntity paymentAttemptEntity = this.paymentAttemptMapper.toEntity(paymentAttemptCreateDto);
     this.paymentAttemptRepository.save(paymentAttemptEntity);
@@ -142,7 +142,7 @@ public class PaymentServiceImpl implements PaymentService {
         .aggregateId(sourceEvent.aggregateId())
         .correlationId(sourceEvent.correlationId())
         .causationId(sourceEvent.eventId())
-        .timestamp(Instant.now())
+        .timestamp(LocalDateTime.now())
         .producer("payment-service")
         .payload(this.objectMapper.valueToTree(mapPayload))
         .build();

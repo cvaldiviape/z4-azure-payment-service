@@ -2,7 +2,7 @@ package com.z4greed.payment.dto;
 
 import com.z4greed.payment.enums.PaymentStatusEnum;
 import java.math.BigDecimal;
-import java.time.Instant;
+import java.time.LocalDateTime;
 import lombok.Builder;
 
 @Builder
@@ -14,4 +14,4 @@ public record PaymentCreateDto(
     String currency,
     PaymentStatusEnum status,
     String failureReason,
-    Instant createdAt) {}
+    LocalDateTime createdAt) {}

@@ -3,7 +3,7 @@ package com.z4greed.payment.entity;
 import com.z4greed.payment.enums.PaymentStatusEnum;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
-import java.time.Instant;
+import java.time.LocalDateTime;
 import lombok.*;
 
 @Entity
@@ -27,6 +27,6 @@ public class PaymentEntity {
   private PaymentStatusEnum status;
 
   private String failureReason;
-  private Instant createdAt;
-  private Instant updatedAt;
+  private LocalDateTime createdAt;
+  private LocalDateTime updatedAt;
 }
