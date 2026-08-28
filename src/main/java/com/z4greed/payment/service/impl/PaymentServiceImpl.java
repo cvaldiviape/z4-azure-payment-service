@@ -33,7 +33,7 @@ public class PaymentServiceImpl implements PaymentService {
   private final PaymentMapper paymentMapper;
   private final PaymentAttemptMapper paymentAttemptMapper;
   private final ProcessedEventMapper processedEventMapper;
-  private final ObjectMapper objectMapper;
+  private final ObjectMapper mapper;
 
   public PaymentServiceImpl(
       PaymentRepository paymentRepository,
@@ -43,7 +43,8 @@ public class PaymentServiceImpl implements PaymentService {
       PaymentMapper paymentMapper,
       PaymentAttemptMapper paymentAttemptMapper,
       ProcessedEventMapper processedEventMapper,
-      ObjectMapper objectMapper) {
+      ObjectMapper mapper
+  ) {
     this.paymentRepository = paymentRepository;
     this.paymentAttemptRepository = paymentAttemptRepository;
     this.processedEventRepository = processedEventRepository;
@@ -51,15 +52,17 @@ public class PaymentServiceImpl implements PaymentService {
     this.paymentMapper = paymentMapper;
     this.paymentAttemptMapper = paymentAttemptMapper;
     this.processedEventMapper = processedEventMapper;
-    this.objectMapper = objectMapper;
+    this.mapper = mapper;
   }
 
   @Override
   public void process(String rawEvent) {
     EventEnvelopeDto eventEnvelopeDto = this.readEvent(rawEvent);
+
     if (this.shouldIgnore(eventEnvelopeDto)) {
       return;
     }
+
     if (this.paymentExists(eventEnvelopeDto)) {
       this.markAsProcessed(eventEnvelopeDto);
       return;
@@ -73,7 +76,7 @@ public class PaymentServiceImpl implements PaymentService {
 
   private EventEnvelopeDto readEvent(String rawEvent) {
     try {
-      return this.objectMapper.readValue(rawEvent, EventEnvelopeDto.class);
+      return this.mapper.readValue(rawEvent, EventEnvelopeDto.class);
     } catch (Exception exception) {
       throw new GreedException(ErrorCodeEnum.INVALID_EVENT, exception);
     }
@@ -144,7 +147,7 @@ public class PaymentServiceImpl implements PaymentService {
         .causationId(sourceEvent.eventId())
         .timestamp(LocalDateTime.now())
         .producer("payment-service")
-        .payload(this.objectMapper.valueToTree(mapPayload))
+        .payload(this.mapper.valueToTree(mapPayload))
         .build();
     this.paymentEventProducer.publish(eventEnvelopeDto);
   }
