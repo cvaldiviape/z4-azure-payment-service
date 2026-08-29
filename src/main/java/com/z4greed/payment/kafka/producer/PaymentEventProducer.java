@@ -1,6 +1,6 @@
 package com.z4greed.payment.kafka.producer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.z4greed.payment.enums.ErrorCodeEnum;
 import com.z4greed.payment.exception.GreedException;
 import com.z4greed.payment.kafka.event.EventEnvelopeDto;

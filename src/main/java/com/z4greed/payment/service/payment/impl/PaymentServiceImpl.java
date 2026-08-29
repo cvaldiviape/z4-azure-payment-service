@@ -1,6 +1,6 @@
 package com.z4greed.payment.service.payment.impl;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.z4greed.payment.dto.PaymentAttemptCreateDto;
 import com.z4greed.payment.dto.PaymentCreateDto;
 import com.z4greed.payment.entity.PaymentAttemptEntity;
