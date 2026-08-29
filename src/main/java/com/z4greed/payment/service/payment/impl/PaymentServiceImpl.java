@@ -1,4 +1,4 @@
-package com.z4greed.payment.service.impl;
+package com.z4greed.payment.service.payment.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.z4greed.payment.dto.PaymentAttemptCreateDto;
@@ -12,7 +12,7 @@ import com.z4greed.payment.kafka.event.EventEnvelopeDto;
 import com.z4greed.payment.kafka.producer.PaymentEventProducer;
 import com.z4greed.payment.mapper.*;
 import com.z4greed.payment.repository.*;
-import com.z4greed.payment.service.PaymentService;
+import com.z4greed.payment.service.payment.PaymentService;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;

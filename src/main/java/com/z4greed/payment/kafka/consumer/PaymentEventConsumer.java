@@ -1,6 +1,6 @@
 package com.z4greed.payment.kafka.consumer;
 
-import com.z4greed.payment.service.PaymentService;
+import com.z4greed.payment.service.payment.PaymentService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -12,8 +12,9 @@ public class PaymentEventConsumer {
     this.paymentService = paymentService;
   }
 
-  @KafkaListener(topics = "payments.events")
-  public void consume(String rawEvent) {
+  // Permanece a la escucha de las solicitudes y resultados publicados en "payments-events-topic".
+  @KafkaListener(topics = "payments-events-topic")
+  public void consumePaymentEvents(String rawEvent) {
     this.paymentService.process(rawEvent);
   }
 

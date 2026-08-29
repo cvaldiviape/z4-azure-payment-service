@@ -1,5 +1,5 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5436/payments_db
-    username: ecommerce
-    password: ecommerce
+    url: ${PAYMENTS_DB_URL:jdbc:postgresql://localhost:5436/payments_db}
+    username: ${PAYMENTS_DB_USERNAME:postgres}
+    password: ${PAYMENTS_DB_PASSWORD:saksah}
