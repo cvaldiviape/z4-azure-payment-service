@@ -12,7 +12,7 @@ public class PaymentEventConsumer {
     this.paymentService = paymentService;
   }
 
-  // Permanece a la escucha de las solicitudes y resultados publicados en "payments-events-topic".
+  // Permanece a la escucha de los eventos de "payments-events-topic" y solo procesa PAYMENT_REQUESTED.
   @KafkaListener(topics = "payments-events-topic")
   public void consumePaymentEvents(String rawEvent) {
     this.paymentService.process(rawEvent);

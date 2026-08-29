@@ -83,8 +83,8 @@ public class PaymentServiceImpl implements PaymentService {
   }
 
   private Boolean shouldIgnore(EventEnvelopeDto eventEnvelopeDto) {
-    Boolean isPaymentRequest = EventTypeEnum.PAYMENT_REQUESTED.getValue().equals(eventEnvelopeDto.eventType());
-    Boolean wasProcessed = this.processedEventRepository.existsById(eventEnvelopeDto.eventId());
+    boolean isPaymentRequest = EventTypeEnum.PAYMENT_REQUESTED.getValue().equals(eventEnvelopeDto.eventType());
+    boolean wasProcessed = this.processedEventRepository.existsById(eventEnvelopeDto.eventId());
     return !isPaymentRequest || wasProcessed;
   }
 
@@ -101,9 +101,11 @@ public class PaymentServiceImpl implements PaymentService {
 
   private PaymentCreateDto createPaymentDto(EventEnvelopeDto eventEnvelopeDto) {
     String paymentToken = eventEnvelopeDto.payload().get("paymentToken").asText();
-    Boolean approved = APPROVED_TOKEN.equals(paymentToken);
+    boolean approved = APPROVED_TOKEN.equals(paymentToken);
+
     PaymentStatusEnum status = approved ? PaymentStatusEnum.APPROVED : PaymentStatusEnum.FAILED;
     String failureReason = approved ? null : FAILURE_REASON;
+
     Long orderId = Long.valueOf(eventEnvelopeDto.aggregateId());
     Long customerId = eventEnvelopeDto.payload().get("customerId").asLong();
     BigDecimal amount = eventEnvelopeDto.payload().get("amount").decimalValue();
@@ -137,7 +139,9 @@ public class PaymentServiceImpl implements PaymentService {
     EventTypeEnum eventType = paymentEntity.getStatus() == PaymentStatusEnum.APPROVED
         ? EventTypeEnum.PAYMENT_APPROVED
         : EventTypeEnum.PAYMENT_FAILED;
+
     Map<String, Object> mapPayload = Map.of("paymentId", paymentEntity.getPaymentId());
+
     EventEnvelopeDto eventEnvelopeDto = EventEnvelopeDto.builder()
         .eventId(UUID.randomUUID().toString())
         .eventType(eventType.getValue())
@@ -149,6 +153,7 @@ public class PaymentServiceImpl implements PaymentService {
         .producer("payment-service")
         .payload(this.mapper.valueToTree(mapPayload))
         .build();
+
     this.paymentEventProducer.publish(eventEnvelopeDto);
   }
 
