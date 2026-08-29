@@ -11,6 +11,8 @@ Servicio responsable de simular el procesamiento de pagos de la Saga de compra.
 | Kafka | `localhost:9092` |
 | Consumer group ID | `payment-event-consumer-group-id` |
 
+Flyway crea y modifica el esquema mediante `db/migration`. Hibernate utiliza `ddl-auto: validate` únicamente para comprobar que las entidades coincidan con las tablas; no crea ni altera la estructura.
+
 ## Kafka
 
 `PaymentEventConsumer` permanece a la escucha de:
