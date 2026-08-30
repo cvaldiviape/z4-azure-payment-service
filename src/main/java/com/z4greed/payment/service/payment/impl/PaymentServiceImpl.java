@@ -1,8 +1,6 @@
 package com.z4greed.payment.service.payment.impl;
 
 import tools.jackson.databind.ObjectMapper;
-import com.z4greed.payment.dto.PaymentAttemptCreateDto;
-import com.z4greed.payment.dto.PaymentCreateDto;
 import com.z4greed.payment.entity.PaymentAttemptEntity;
 import com.z4greed.payment.entity.PaymentEntity;
 import com.z4greed.payment.entity.ProcessedEventEntity;
@@ -10,7 +8,7 @@ import com.z4greed.payment.enums.*;
 import com.z4greed.payment.exception.GreedException;
 import com.z4greed.payment.kafka.event.EventEnvelopeDto;
 import com.z4greed.payment.kafka.producer.PaymentEventProducer;
-import com.z4greed.payment.mapper.*;
+import com.z4greed.payment.mapper.ProcessedEventMapper;
 import com.z4greed.payment.repository.*;
 import com.z4greed.payment.service.payment.PaymentService;
 import java.math.BigDecimal;
@@ -30,8 +28,6 @@ public class PaymentServiceImpl implements PaymentService {
   private final PaymentAttemptRepository paymentAttemptRepository;
   private final ProcessedEventRepository processedEventRepository;
   private final PaymentEventProducer paymentEventProducer;
-  private final PaymentMapper paymentMapper;
-  private final PaymentAttemptMapper paymentAttemptMapper;
   private final ProcessedEventMapper processedEventMapper;
   private final ObjectMapper mapper;
 
@@ -40,8 +36,6 @@ public class PaymentServiceImpl implements PaymentService {
       PaymentAttemptRepository paymentAttemptRepository,
       ProcessedEventRepository processedEventRepository,
       PaymentEventProducer paymentEventProducer,
-      PaymentMapper paymentMapper,
-      PaymentAttemptMapper paymentAttemptMapper,
       ProcessedEventMapper processedEventMapper,
       ObjectMapper mapper
   ) {
@@ -49,8 +43,6 @@ public class PaymentServiceImpl implements PaymentService {
     this.paymentAttemptRepository = paymentAttemptRepository;
     this.processedEventRepository = processedEventRepository;
     this.paymentEventProducer = paymentEventProducer;
-    this.paymentMapper = paymentMapper;
-    this.paymentAttemptMapper = paymentAttemptMapper;
     this.processedEventMapper = processedEventMapper;
     this.mapper = mapper;
   }
@@ -94,12 +86,11 @@ public class PaymentServiceImpl implements PaymentService {
   }
 
   private PaymentEntity createPayment(EventEnvelopeDto eventEnvelopeDto) {
-    PaymentCreateDto paymentCreateDto = this.createPaymentDto(eventEnvelopeDto);
-    PaymentEntity paymentEntity = this.paymentMapper.toEntity(paymentCreateDto);
+    PaymentEntity paymentEntity = this.buildPaymentEntity(eventEnvelopeDto);
     return this.paymentRepository.save(paymentEntity);
   }
 
-  private PaymentCreateDto createPaymentDto(EventEnvelopeDto eventEnvelopeDto) {
+  private PaymentEntity buildPaymentEntity(EventEnvelopeDto eventEnvelopeDto) {
     String paymentToken = eventEnvelopeDto.payload().get("paymentToken").asText();
     boolean approved = APPROVED_TOKEN.equals(paymentToken);
 
@@ -111,7 +102,7 @@ public class PaymentServiceImpl implements PaymentService {
     BigDecimal amount = eventEnvelopeDto.payload().get("amount").decimalValue();
     String currency = eventEnvelopeDto.payload().get("currency").asText();
 
-    return PaymentCreateDto.builder()
+    return PaymentEntity.builder()
         .paymentId(UUID.randomUUID().toString())
         .orderId(orderId)
         .customerId(customerId)
@@ -124,14 +115,14 @@ public class PaymentServiceImpl implements PaymentService {
   }
 
   private void createPaymentAttempt(PaymentEntity paymentEntity) {
-    PaymentAttemptCreateDto paymentAttemptCreateDto = PaymentAttemptCreateDto.builder()
+    PaymentAttemptEntity paymentAttemptEntity = PaymentAttemptEntity.builder()
         .paymentId(paymentEntity.getPaymentId())
         .attemptNumber(1)
         .result(paymentEntity.getStatus().name())
         .errorMessage(paymentEntity.getFailureReason())
         .createdAt(LocalDateTime.now())
         .build();
-    PaymentAttemptEntity paymentAttemptEntity = this.paymentAttemptMapper.toEntity(paymentAttemptCreateDto);
+
     this.paymentAttemptRepository.save(paymentAttemptEntity);
   }
 
