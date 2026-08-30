@@ -17,7 +17,7 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092} # Dirección del broker. La variable permite sobrescribir localhost en otros entornos.
     consumer:
-      group-id: payment-event-consumer-group-id # Grupo suscriptor de pagos para el topic payments-events-topic.
+      group-id: payment-command-consumer-group-id # Grupo de Payment Service que procesa comandos de payments-commands-topic.
       auto-offset-reset: earliest # Si el grupo no tiene un offset guardado, comienza desde el mensaje más antiguo.
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer # Los eventos se reciben como texto porque el proyecto deserializa el JSON manualmente.
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer

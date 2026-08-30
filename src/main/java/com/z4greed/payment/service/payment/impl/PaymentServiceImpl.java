@@ -15,15 +15,14 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional
+@Slf4j
 public class PaymentServiceImpl implements PaymentService {
-  private static final String APPROVED_TOKEN = "TEST_APPROVED";
-  private static final String FAILURE_REASON = "Simulated payment rejection";
-
   private final PaymentRepository paymentRepository;
   private final PaymentAttemptRepository paymentAttemptRepository;
   private final ProcessedEventRepository processedEventRepository;
@@ -50,28 +49,52 @@ public class PaymentServiceImpl implements PaymentService {
   @Override
   public void process(String rawEvent) {
     EventEnvelopeDto eventEnvelopeDto = this.readEvent(rawEvent);
+    log.info("action=event_received eventType={} eventId={} correlationId={} orderId={} producer={}", eventEnvelopeDto.eventType(), eventEnvelopeDto.eventId(), eventEnvelopeDto.correlationId(), eventEnvelopeDto.aggregateId(), eventEnvelopeDto.producer());
+
+    try {
+      this.processEvent(eventEnvelopeDto);
+    } catch (RuntimeException exception) {
+      log.error("action=event_processing_failed eventType={} eventId={} correlationId={} orderId={}", eventEnvelopeDto.eventType(), eventEnvelopeDto.eventId(), eventEnvelopeDto.correlationId(), eventEnvelopeDto.aggregateId(), exception);
+      throw exception;
+    }
+  }
+
+  private void processEvent(EventEnvelopeDto eventEnvelopeDto) {
 
     if (this.shouldIgnore(eventEnvelopeDto)) {
+      log.info("action=event_ignored reason=unsupported_or_already_processed eventType={} eventId={} correlationId={} orderId={}", eventEnvelopeDto.eventType(), eventEnvelopeDto.eventId(), eventEnvelopeDto.correlationId(), eventEnvelopeDto.aggregateId());
       return;
     }
 
     if (this.paymentExists(eventEnvelopeDto)) {
       this.markAsProcessed(eventEnvelopeDto);
+      log.info("action=event_ignored reason=payment_already_exists eventType={} eventId={} correlationId={} orderId={}", eventEnvelopeDto.eventType(), eventEnvelopeDto.eventId(), eventEnvelopeDto.correlationId(), eventEnvelopeDto.aggregateId());
       return;
     }
 
     PaymentEntity paymentEntity = this.createPayment(eventEnvelopeDto);
     this.createPaymentAttempt(paymentEntity);
-    this.publishPaymentResult(eventEnvelopeDto, paymentEntity);
+    EventEnvelopeDto paymentResultEvent = this.publishPaymentResult(eventEnvelopeDto, paymentEntity);
     this.markAsProcessed(eventEnvelopeDto);
+    this.logPaymentResult(paymentResultEvent, paymentEntity);
   }
 
   private EventEnvelopeDto readEvent(String rawEvent) {
     try {
       return this.mapper.readValue(rawEvent, EventEnvelopeDto.class);
     } catch (Exception exception) {
+      log.error("action=event_deserialization_failed message=Invalid_Kafka_event", exception);
       throw new GreedException(ErrorCodeEnum.INVALID_EVENT, exception);
     }
+  }
+
+  private void logPaymentResult(EventEnvelopeDto paymentResultEvent, PaymentEntity paymentEntity) {
+    if (paymentEntity.getStatus() == PaymentStatusEnum.FAILED) {
+      log.warn("action=payment_rejected eventType={} eventId={} correlationId={} orderId={} paymentId={} reason=\"{}\"", paymentResultEvent.eventType(), paymentResultEvent.eventId(), paymentResultEvent.correlationId(), paymentResultEvent.aggregateId(), paymentEntity.getPaymentId(), paymentEntity.getFailureReason());
+      return;
+    }
+
+    log.info("action=payment_approved eventType={} eventId={} correlationId={} orderId={} paymentId={}", paymentResultEvent.eventType(), paymentResultEvent.eventId(), paymentResultEvent.correlationId(), paymentResultEvent.aggregateId(), paymentEntity.getPaymentId());
   }
 
   private Boolean shouldIgnore(EventEnvelopeDto eventEnvelopeDto) {
@@ -92,10 +115,15 @@ public class PaymentServiceImpl implements PaymentService {
 
   private PaymentEntity buildPaymentEntity(EventEnvelopeDto eventEnvelopeDto) {
     String paymentToken = eventEnvelopeDto.payload().get("paymentToken").asText();
-    boolean approved = APPROVED_TOKEN.equals(paymentToken);
+    boolean approved = "TEST_APPROVED".equals(paymentToken);
 
-    PaymentStatusEnum status = approved ? PaymentStatusEnum.APPROVED : PaymentStatusEnum.FAILED;
-    String failureReason = approved ? null : FAILURE_REASON;
+    PaymentStatusEnum status = approved
+            ? PaymentStatusEnum.APPROVED
+            : PaymentStatusEnum.FAILED;
+
+    String failureReason = approved
+            ? null
+            : "The paymentToken is invalid";
 
     Long orderId = Long.valueOf(eventEnvelopeDto.aggregateId());
     Long customerId = eventEnvelopeDto.payload().get("customerId").asLong();
@@ -126,7 +154,7 @@ public class PaymentServiceImpl implements PaymentService {
     this.paymentAttemptRepository.save(paymentAttemptEntity);
   }
 
-  private void publishPaymentResult(EventEnvelopeDto sourceEvent, PaymentEntity paymentEntity) {
+  private EventEnvelopeDto publishPaymentResult(EventEnvelopeDto sourceEvent, PaymentEntity paymentEntity) {
     EventTypeEnum eventType = paymentEntity.getStatus() == PaymentStatusEnum.APPROVED
         ? EventTypeEnum.PAYMENT_APPROVED
         : EventTypeEnum.PAYMENT_FAILED;
@@ -146,6 +174,7 @@ public class PaymentServiceImpl implements PaymentService {
         .build();
 
     this.paymentEventProducer.publish("payments-events-topic", eventEnvelopeDto);
+    return eventEnvelopeDto;
   }
 
   private void markAsProcessed(EventEnvelopeDto eventEnvelopeDto) {
