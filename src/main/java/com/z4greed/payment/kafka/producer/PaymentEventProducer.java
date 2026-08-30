@@ -18,10 +18,10 @@ public class PaymentEventProducer {
     this.objectMapper = objectMapper;
   }
 
-  public void publish(EventEnvelopeDto eventEnvelopeDto) {
+  public void publish(String topic, EventEnvelopeDto eventEnvelopeDto) {
     try {
       String eventJson = this.objectMapper.writeValueAsString(eventEnvelopeDto);
-      this.kafkaTemplate.send("payments-events-topic", eventEnvelopeDto.aggregateId(), eventJson);
+      this.kafkaTemplate.send(topic, eventEnvelopeDto.aggregateId(), eventJson);
     } catch (Exception exception) {
       throw new GreedException(ErrorCodeEnum.EVENT_PUBLISH_FAILED, exception);
     }

@@ -154,7 +154,7 @@ public class PaymentServiceImpl implements PaymentService {
         .payload(this.mapper.valueToTree(mapPayload))
         .build();
 
-    this.paymentEventProducer.publish(eventEnvelopeDto);
+    this.paymentEventProducer.publish("payments-events-topic", eventEnvelopeDto);
   }
 
   private void markAsProcessed(EventEnvelopeDto eventEnvelopeDto) {
