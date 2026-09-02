@@ -53,7 +53,7 @@ SPRING_PROFILES_ACTIVE
 Desde la raíz del proyecto:
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d kafka payments-postgres
+docker compose -f infra/docker/docker-compose.yml up -d kafka payments-postgres
 ```
 
 Después ejecuta `PaymentServiceApplication` con **Debug** en IntelliJ.
