@@ -5,7 +5,7 @@ import com.z4greed.payment.entity.PaymentAttemptEntity;
 import com.z4greed.payment.entity.PaymentEntity;
 import com.z4greed.payment.entity.ProcessedEventEntity;
 import com.z4greed.payment.enums.*;
-import com.z4greed.payment.exception.GreedException;
+import com.z4greed.payment.exception.CustomNonRetryableKafkaException;
 import com.z4greed.payment.kafka.event.EventEnvelopeDto;
 import com.z4greed.payment.kafka.producer.PaymentEventProducer;
 import com.z4greed.payment.mapper.ProcessedEventMapper;
@@ -84,7 +84,7 @@ public class PaymentServiceImpl implements PaymentService {
       return this.mapper.readValue(rawEvent, EventEnvelopeDto.class);
     } catch (Exception exception) {
       log.error("action=event_deserialization_failed message=Invalid_Kafka_event", exception);
-      throw new GreedException(ErrorCodeEnum.INVALID_EVENT, exception);
+      throw new CustomNonRetryableKafkaException(ErrorCodeEnum.INVALID_EVENT, exception);
     }
   }
 

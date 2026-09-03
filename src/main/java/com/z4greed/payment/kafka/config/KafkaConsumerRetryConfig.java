@@ -1,5 +1,6 @@
 package com.z4greed.payment.kafka.config;
 
+import com.z4greed.payment.exception.CustomRetryableKafkaException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -7,6 +8,8 @@ import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.dao.RecoverableDataAccessException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.KafkaAdmin.NewTopics;
@@ -37,6 +40,16 @@ public class KafkaConsumerRetryConfig {
     long maxRetries = Math.max(this.maxAttempts - 1L, 0L);
     FixedBackOff fixedBackOff = new FixedBackOff(this.retryIntervalMilliseconds, maxRetries);
     DefaultErrorHandler defaultErrorHandler = new DefaultErrorHandler(deadLetterPublishingRecoverer, fixedBackOff);
+
+    // La política es restrictiva: cualquier excepción desconocida va directamente al DLT.
+    // Solo se reintentan fallos que declaramos explícitamente como temporales o recuperables.
+    defaultErrorHandler.defaultFalse();
+    defaultErrorHandler.addRetryableExceptions(
+        CustomRetryableKafkaException.class,
+        TransientDataAccessException.class,
+        RecoverableDataAccessException.class);
+
+
     defaultErrorHandler.setRetryListeners(this::logRetryAttempt);
     return defaultErrorHandler;
   }
@@ -73,12 +86,7 @@ public class KafkaConsumerRetryConfig {
   @Bean
   public NewTopics paymentDeadLetterTopics() {
     NewTopic newTopic = TopicBuilder.name("payments-commands-topic-dlt")
-            // Una partición es suficiente en local y coincide con la partición 0 del topic de origen.
-            // El DLT debe tener al menos las mismas particiones que el origen porque el recoverer
-            // conserva el número de partición al trasladar el mensaje fallido.
             .partitions(1)
-            // Una réplica significa que existe una sola copia, alojada en el único broker local.
-            // En producción normalmente se usa un valor mayor (por ejemplo 3) para tolerar fallos.
             .replicas(1)
             .build();
 

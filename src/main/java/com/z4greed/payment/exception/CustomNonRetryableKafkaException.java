@@ -4,12 +4,11 @@ import com.z4greed.payment.enums.ErrorCodeEnum;
 import lombok.Getter;
 
 @Getter
-public class GreedException extends RuntimeException {
+public class CustomNonRetryableKafkaException extends RuntimeException {
   private final ErrorCodeEnum errorCode;
 
-  public GreedException(ErrorCodeEnum errorCode, Throwable cause) {
+  public CustomNonRetryableKafkaException(ErrorCodeEnum errorCode, Throwable cause) {
     super(errorCode.getMessage(), cause);
     this.errorCode = errorCode;
   }
-
 }
