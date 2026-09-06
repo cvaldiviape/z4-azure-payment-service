@@ -55,6 +55,15 @@ public class PaymentServiceImpl implements PaymentService {
     }
   }
 
+  private EventEnvelopeDto readEvent(String rawEvent) {
+    try {
+      return this.mapper.readValue(rawEvent, EventEnvelopeDto.class);
+    } catch (Exception exception) {
+      log.error("action=event_deserialization_failed message=Invalid_Kafka_event", exception);
+      throw new CustomNonRetryableKafkaException(ErrorCodeEnum.INVALID_EVENT, exception);
+    }
+  }
+
   private void processEvent(EventEnvelopeDto eventEnvelopeDto) {
 
     if (this.shouldIgnore(eventEnvelopeDto)) {
@@ -75,14 +84,7 @@ public class PaymentServiceImpl implements PaymentService {
     this.logPaymentResult(paymentResultEvent, paymentEntity);
   }
 
-  private EventEnvelopeDto readEvent(String rawEvent) {
-    try {
-      return this.mapper.readValue(rawEvent, EventEnvelopeDto.class);
-    } catch (Exception exception) {
-      log.error("action=event_deserialization_failed message=Invalid_Kafka_event", exception);
-      throw new CustomNonRetryableKafkaException(ErrorCodeEnum.INVALID_EVENT, exception);
-    }
-  }
+
 
   private void logPaymentResult(EventEnvelopeDto paymentResultEvent, PaymentEntity paymentEntity) {
     if (paymentEntity.getStatus() == PaymentStatusEnum.FAILED) {
