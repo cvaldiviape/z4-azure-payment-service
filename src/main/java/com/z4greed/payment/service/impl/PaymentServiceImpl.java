@@ -63,7 +63,7 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     if (this.paymentExists(eventEnvelopeDto)) {
-      this.inboxEventService.register(eventEnvelopeDto);
+      this.inboxEventService.register(eventEnvelopeDto, "payments-commands-topic");
       log.info("action=event_ignored reason=payment_already_exists eventType={} eventId={} correlationId={} orderId={}", eventEnvelopeDto.eventType(), eventEnvelopeDto.eventId(), eventEnvelopeDto.correlationId(), eventEnvelopeDto.aggregateId());
       return;
     }
@@ -71,7 +71,7 @@ public class PaymentServiceImpl implements PaymentService {
     PaymentEntity paymentEntity = this.createPayment(eventEnvelopeDto);
     this.createPaymentAttempt(paymentEntity);
     EventEnvelopeDto paymentResultEvent = this.publishPaymentResult(eventEnvelopeDto, paymentEntity);
-    this.inboxEventService.register(eventEnvelopeDto);
+    this.inboxEventService.register(eventEnvelopeDto, "payments-commands-topic");
     this.logPaymentResult(paymentResultEvent, paymentEntity);
   }
 
