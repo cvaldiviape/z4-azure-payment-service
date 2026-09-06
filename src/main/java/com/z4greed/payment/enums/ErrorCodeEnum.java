@@ -7,6 +7,6 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum ErrorCodeEnum {
   INVALID_EVENT("Invalid event"),
-  EVENT_PUBLISH_FAILED("Event publish failed");
+  OUTBOX_SERIALIZATION_FAILED("Outbox event serialization failed");
   private final String message;
 }

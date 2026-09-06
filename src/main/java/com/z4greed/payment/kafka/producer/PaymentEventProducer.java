@@ -1,39 +1,38 @@
 package com.z4greed.payment.kafka.producer;
 
-import tools.jackson.databind.ObjectMapper;
-import com.z4greed.payment.enums.ErrorCodeEnum;
-import com.z4greed.payment.exception.CustomNonRetryableKafkaException;
-import com.z4greed.payment.kafka.event.EventEnvelopeDto;
+import com.z4greed.payment.entity.OutboxEventEntity;
+import com.z4greed.payment.exception.CustomRetryableKafkaException;
+import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 @Slf4j
 public class PaymentEventProducer {
   private final KafkaTemplate<String, String> kafkaTemplate;
-  private final ObjectMapper objectMapper;
+  private final long sendTimeoutMilliseconds;
 
   public PaymentEventProducer(
-      KafkaTemplate<String, String> kafkaTemplate, ObjectMapper objectMapper) {
+      KafkaTemplate<String, String> kafkaTemplate,
+      @Value("${app.outbox.send-timeout-milliseconds}") long sendTimeoutMilliseconds) {
     this.kafkaTemplate = kafkaTemplate;
-    this.objectMapper = objectMapper;
+    this.sendTimeoutMilliseconds = sendTimeoutMilliseconds;
   }
 
-  public void publish(String topic, EventEnvelopeDto eventEnvelopeDto) {
+  public void publishAndWait(OutboxEventEntity event) {
     try {
-      String eventJson = this.objectMapper.writeValueAsString(eventEnvelopeDto);
-      this.kafkaTemplate.send(topic, eventEnvelopeDto.aggregateId(), eventJson).whenComplete((sendResult, exception) -> {
-        if (exception != null) {
-          log.error("action=event_publish_failed topic={} eventType={} eventId={} correlationId={} orderId={}", topic, eventEnvelopeDto.eventType(), eventEnvelopeDto.eventId(), eventEnvelopeDto.correlationId(), eventEnvelopeDto.aggregateId(), exception);
-          return;
-        }
-
-        log.info("action=event_published topic={} partition={} offset={} eventType={} eventId={} correlationId={} orderId={}", topic, sendResult.getRecordMetadata().partition(), sendResult.getRecordMetadata().offset(), eventEnvelopeDto.eventType(), eventEnvelopeDto.eventId(), eventEnvelopeDto.correlationId(), eventEnvelopeDto.aggregateId());
-      });
+      var result = this.kafkaTemplate.send(event.getTopic(), event.getEventKey(), event.getPayload())
+          .get(this.sendTimeoutMilliseconds, TimeUnit.MILLISECONDS);
+      log.info("action=event_published topic={} partition={} offset={} eventType={} eventId={} correlationId={} orderId={}",
+          event.getTopic(), result.getRecordMetadata().partition(), result.getRecordMetadata().offset(),
+          event.getEventType(), event.getEventId(), event.getCorrelationId(), event.getAggregateId());
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new CustomRetryableKafkaException("Kafka publication was interrupted", exception);
     } catch (Exception exception) {
-      log.error("action=event_serialization_failed topic={} eventType={} eventId={} correlationId={} orderId={}", topic, eventEnvelopeDto.eventType(), eventEnvelopeDto.eventId(), eventEnvelopeDto.correlationId(), eventEnvelopeDto.aggregateId(), exception);
-      throw new CustomNonRetryableKafkaException(ErrorCodeEnum.EVENT_PUBLISH_FAILED, exception);
+      throw new CustomRetryableKafkaException("Kafka did not confirm the outbox event", exception);
     }
   }
 
