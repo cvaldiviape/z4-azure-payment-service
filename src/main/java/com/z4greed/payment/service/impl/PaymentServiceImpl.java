@@ -1,16 +1,15 @@
-package com.z4greed.payment.service.payment.impl;
+package com.z4greed.payment.service.impl;
 
 import tools.jackson.databind.ObjectMapper;
 import com.z4greed.payment.entity.PaymentAttemptEntity;
 import com.z4greed.payment.entity.PaymentEntity;
-import com.z4greed.payment.entity.ProcessedEventEntity;
 import com.z4greed.payment.enums.*;
-import com.z4greed.payment.exception.GreedException;
+import com.z4greed.payment.exception.CustomNonRetryableKafkaException;
 import com.z4greed.payment.kafka.event.EventEnvelopeDto;
-import com.z4greed.payment.kafka.producer.PaymentEventProducer;
-import com.z4greed.payment.mapper.ProcessedEventMapper;
 import com.z4greed.payment.repository.*;
-import com.z4greed.payment.service.payment.PaymentService;
+import com.z4greed.payment.service.InboxEventService;
+import com.z4greed.payment.service.OutboxEventService;
+import com.z4greed.payment.service.PaymentService;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -25,24 +24,21 @@ import org.springframework.transaction.annotation.Transactional;
 public class PaymentServiceImpl implements PaymentService {
   private final PaymentRepository paymentRepository;
   private final PaymentAttemptRepository paymentAttemptRepository;
-  private final ProcessedEventRepository processedEventRepository;
-  private final PaymentEventProducer paymentEventProducer;
-  private final ProcessedEventMapper processedEventMapper;
+  private final InboxEventService inboxEventService;
+  private final OutboxEventService outboxEventService;
   private final ObjectMapper mapper;
 
   public PaymentServiceImpl(
       PaymentRepository paymentRepository,
       PaymentAttemptRepository paymentAttemptRepository,
-      ProcessedEventRepository processedEventRepository,
-      PaymentEventProducer paymentEventProducer,
-      ProcessedEventMapper processedEventMapper,
+      InboxEventService inboxEventService,
+      OutboxEventService outboxEventService,
       ObjectMapper mapper
   ) {
     this.paymentRepository = paymentRepository;
     this.paymentAttemptRepository = paymentAttemptRepository;
-    this.processedEventRepository = processedEventRepository;
-    this.paymentEventProducer = paymentEventProducer;
-    this.processedEventMapper = processedEventMapper;
+    this.inboxEventService = inboxEventService;
+    this.outboxEventService = outboxEventService;
     this.mapper = mapper;
   }
 
@@ -67,7 +63,7 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     if (this.paymentExists(eventEnvelopeDto)) {
-      this.markAsProcessed(eventEnvelopeDto);
+      this.inboxEventService.register(eventEnvelopeDto);
       log.info("action=event_ignored reason=payment_already_exists eventType={} eventId={} correlationId={} orderId={}", eventEnvelopeDto.eventType(), eventEnvelopeDto.eventId(), eventEnvelopeDto.correlationId(), eventEnvelopeDto.aggregateId());
       return;
     }
@@ -75,7 +71,7 @@ public class PaymentServiceImpl implements PaymentService {
     PaymentEntity paymentEntity = this.createPayment(eventEnvelopeDto);
     this.createPaymentAttempt(paymentEntity);
     EventEnvelopeDto paymentResultEvent = this.publishPaymentResult(eventEnvelopeDto, paymentEntity);
-    this.markAsProcessed(eventEnvelopeDto);
+    this.inboxEventService.register(eventEnvelopeDto);
     this.logPaymentResult(paymentResultEvent, paymentEntity);
   }
 
@@ -84,7 +80,7 @@ public class PaymentServiceImpl implements PaymentService {
       return this.mapper.readValue(rawEvent, EventEnvelopeDto.class);
     } catch (Exception exception) {
       log.error("action=event_deserialization_failed message=Invalid_Kafka_event", exception);
-      throw new GreedException(ErrorCodeEnum.INVALID_EVENT, exception);
+      throw new CustomNonRetryableKafkaException(ErrorCodeEnum.INVALID_EVENT, exception);
     }
   }
 
@@ -99,7 +95,7 @@ public class PaymentServiceImpl implements PaymentService {
 
   private Boolean shouldIgnore(EventEnvelopeDto eventEnvelopeDto) {
     boolean isPaymentRequest = EventTypeEnum.PAYMENT_REQUESTED.getValue().equals(eventEnvelopeDto.eventType());
-    boolean wasProcessed = this.processedEventRepository.existsById(eventEnvelopeDto.eventId());
+    boolean wasProcessed = this.inboxEventService.wasAlreadyProcessed(eventEnvelopeDto.eventId());
     return !isPaymentRequest || wasProcessed;
   }
 
@@ -173,13 +169,8 @@ public class PaymentServiceImpl implements PaymentService {
         .payload(this.mapper.valueToTree(mapPayload))
         .build();
 
-    this.paymentEventProducer.publish("payments-events-topic", eventEnvelopeDto);
+    this.outboxEventService.enqueue("payments-events-topic", eventEnvelopeDto);
     return eventEnvelopeDto;
-  }
-
-  private void markAsProcessed(EventEnvelopeDto eventEnvelopeDto) {
-    ProcessedEventEntity processedEventEntity = this.processedEventMapper.toEntity(eventEnvelopeDto);
-    this.processedEventRepository.save(processedEventEntity);
   }
 
 }

@@ -1,6 +1,6 @@
 package com.z4greed.payment.kafka.consumer;
 
-import com.z4greed.payment.service.payment.PaymentService;
+import com.z4greed.payment.service.PaymentService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
