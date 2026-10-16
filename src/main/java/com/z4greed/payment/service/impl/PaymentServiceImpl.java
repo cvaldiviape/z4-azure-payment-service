@@ -55,26 +55,6 @@ public class PaymentServiceImpl implements PaymentService {
     }
   }
 
-  private void processEvent(EventEnvelopeDto eventEnvelopeDto) {
-
-    if (this.shouldIgnore(eventEnvelopeDto)) {
-      log.info("action=event_ignored reason=unsupported_or_already_processed eventType={} eventId={} correlationId={} orderId={}", eventEnvelopeDto.eventType(), eventEnvelopeDto.eventId(), eventEnvelopeDto.correlationId(), eventEnvelopeDto.aggregateId());
-      return;
-    }
-
-    if (this.paymentExists(eventEnvelopeDto)) {
-      this.inboxEventService.register(eventEnvelopeDto);
-      log.info("action=event_ignored reason=payment_already_exists eventType={} eventId={} correlationId={} orderId={}", eventEnvelopeDto.eventType(), eventEnvelopeDto.eventId(), eventEnvelopeDto.correlationId(), eventEnvelopeDto.aggregateId());
-      return;
-    }
-
-    PaymentEntity paymentEntity = this.createPayment(eventEnvelopeDto);
-    this.createPaymentAttempt(paymentEntity);
-    EventEnvelopeDto paymentResultEvent = this.publishPaymentResult(eventEnvelopeDto, paymentEntity);
-    this.inboxEventService.register(eventEnvelopeDto);
-    this.logPaymentResult(paymentResultEvent, paymentEntity);
-  }
-
   private EventEnvelopeDto readEvent(String rawEvent) {
     try {
       return this.mapper.readValue(rawEvent, EventEnvelopeDto.class);
@@ -83,6 +63,28 @@ public class PaymentServiceImpl implements PaymentService {
       throw new CustomNonRetryableKafkaException(ErrorCodeEnum.INVALID_EVENT, exception);
     }
   }
+
+  private void processEvent(EventEnvelopeDto eventEnvelopeDto) {
+
+    if (this.shouldIgnore(eventEnvelopeDto)) {
+      log.info("action=event_ignored reason=unsupported_or_already_processed eventType={} eventId={} correlationId={} orderId={}", eventEnvelopeDto.eventType(), eventEnvelopeDto.eventId(), eventEnvelopeDto.correlationId(), eventEnvelopeDto.aggregateId());
+      return;
+    }
+
+    if (this.paymentExists(eventEnvelopeDto)) {
+      this.inboxEventService.register(eventEnvelopeDto, "payments-commands-topic");
+      log.info("action=event_ignored reason=payment_already_exists eventType={} eventId={} correlationId={} orderId={}", eventEnvelopeDto.eventType(), eventEnvelopeDto.eventId(), eventEnvelopeDto.correlationId(), eventEnvelopeDto.aggregateId());
+      return;
+    }
+
+    PaymentEntity paymentEntity = this.createPayment(eventEnvelopeDto);
+    this.createPaymentAttempt(paymentEntity);
+    EventEnvelopeDto paymentResultEvent = this.publishPaymentResult(eventEnvelopeDto, paymentEntity);
+    this.inboxEventService.register(eventEnvelopeDto, "payments-commands-topic");
+    this.logPaymentResult(paymentResultEvent, paymentEntity);
+  }
+
+
 
   private void logPaymentResult(EventEnvelopeDto paymentResultEvent, PaymentEntity paymentEntity) {
     if (paymentEntity.getStatus() == PaymentStatusEnum.FAILED) {
