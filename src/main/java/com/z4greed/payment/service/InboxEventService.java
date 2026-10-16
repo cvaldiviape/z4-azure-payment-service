@@ -1,8 +1,8 @@
 package com.z4greed.payment.service;
 
-import com.z4greed.payment.kafka.event.EventEnvelopeDto;
+import com.z4greed.payment.kafka.event.IntegrationEventDto;
 
 public interface InboxEventService {
   boolean wasAlreadyProcessed(String eventId);
-  void register(EventEnvelopeDto eventEnvelopeDto, String sourceTopic);
+  void register(IntegrationEventDto event, String sourceTopic);
 }

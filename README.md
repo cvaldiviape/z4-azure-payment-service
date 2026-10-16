@@ -9,7 +9,7 @@ Servicio responsable de simular el procesamiento de pagos de la Saga de compra.
 | Puerto HTTP | `8084` |
 | PostgreSQL | `localhost:5436/payments_db` |
 | Kafka | `localhost:9092` |
-| Consumer group ID | `payment-command-consumer-group-id` |
+| Consumer group ID | `payment-request-consumer-group-id` |
 
 Flyway crea y modifica el esquema mediante `db/migration`. Hibernate utiliza `ddl-auto: validate` únicamente para comprobar que las entidades coincidan con las tablas; no crea ni altera la estructura.
 
@@ -18,7 +18,7 @@ Flyway crea y modifica el esquema mediante `db/migration`. Hibernate utiliza `dd
 `PaymentEventConsumer` permanece a la escucha de:
 
 ```text
-payments-commands-topic
+payment-processing-requests-topic
 ```
 
 El servicio procesa el comando:
@@ -27,14 +27,14 @@ El servicio procesa el comando:
 PAYMENT_REQUESTED
 ```
 
-Después publica en `payments-events-topic` uno de estos resultados:
+Después publica en `payment-processing-results-topic` uno de estos resultados:
 
 ```text
 PAYMENT_APPROVED
 PAYMENT_FAILED
 ```
 
-Payment Service consume únicamente comandos y no vuelve a recibir sus propios resultados.
+Payment Service consume únicamente solicitudes y no vuelve a recibir sus propios resultados.
 
 El token `TEST_APPROVED` simula una aprobación. Cualquier otro valor simula un rechazo.
 

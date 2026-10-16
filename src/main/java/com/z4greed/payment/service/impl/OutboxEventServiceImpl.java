@@ -3,7 +3,7 @@ package com.z4greed.payment.service.impl;
 import com.z4greed.payment.entity.OutboxEventEntity;
 import com.z4greed.payment.enums.*;
 import com.z4greed.payment.exception.CustomNonRetryableKafkaException;
-import com.z4greed.payment.kafka.event.EventEnvelopeDto;
+import com.z4greed.payment.kafka.event.IntegrationEventDto;
 import com.z4greed.payment.repository.OutboxEventRepository;
 import com.z4greed.payment.service.OutboxEventService;
 import java.time.LocalDateTime;
@@ -26,7 +26,7 @@ public class OutboxEventServiceImpl implements OutboxEventService {
 
   @Override
   @Transactional
-  public void enqueue(String topic, EventEnvelopeDto event) {
+  public void enqueue(String topic, IntegrationEventDto event) {
     String payload = this.serialize(event);
 
     OutboxEventEntity outboxEventEntity = OutboxEventEntity.builder()
@@ -43,7 +43,7 @@ public class OutboxEventServiceImpl implements OutboxEventService {
     this.outboxEventRepository.save(outboxEventEntity);
   }
 
-  private String serialize(EventEnvelopeDto event) {
+  private String serialize(IntegrationEventDto event) {
     try {
       return this.mapper.writeValueAsString(event);
     } catch (Exception exception) {
