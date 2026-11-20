@@ -13,20 +13,20 @@ import lombok.*;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class PaymentEntity {
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-  private String paymentId;
-  private Long orderId;
-  private Long customerId;
-  private BigDecimal amount;
-  private String currency;
+    private String paymentId;
+    private Long orderId;
+    private Long customerId;
+    private BigDecimal amount;
+    private String currency;
 
-  @Enumerated(EnumType.STRING)
-  private PaymentStatusEnum status;
+    @Enumerated(EnumType.STRING)
+    private PaymentStatusEnum status;
 
-  private String failureReason;
-  private LocalDateTime createdAt;
-  private LocalDateTime updatedAt;
+    private String failureReason;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }
