@@ -1,178 +1,120 @@
 package com.z4greed.payment.service.impl;
 
-import tools.jackson.databind.ObjectMapper;
 import com.z4greed.payment.entity.PaymentAttemptEntity;
 import com.z4greed.payment.entity.PaymentEntity;
-import com.z4greed.payment.enums.*;
-import com.z4greed.payment.exception.CustomNonRetryableKafkaException;
-import com.z4greed.payment.kafka.event.IntegrationEventDto;
-import com.z4greed.payment.repository.*;
-import com.z4greed.payment.service.InboxEventService;
-import com.z4greed.payment.service.OutboxEventService;
+import com.z4greed.payment.enums.EventTypeEnum;
+import com.z4greed.payment.enums.PaymentStatusEnum;
+import com.z4greed.payment.kafka.KafkaTopics;
+import com.z4greed.shared.kafka.event.IntegrationEventDto;
+import com.z4greed.shared.kafka.event.IntegrationEventReader;
+import com.z4greed.payment.kafka.factory.PaymentEventFactory;
+import com.z4greed.payment.repository.PaymentAttemptRepository;
+import com.z4greed.payment.repository.PaymentRepository;
+import com.z4greed.shared.kafka.inbox.InboxEventService;
+import com.z4greed.shared.kafka.outbox.OutboxEventService;
 import com.z4greed.payment.service.PaymentService;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.JsonNode;
 
 @Service
 @Transactional
-@Slf4j
 public class PaymentServiceImpl implements PaymentService {
+    // Pasarela simulada: solo este token se aprueba.
+    private static final String APPROVED_TEST_TOKEN = "TEST_APPROVED";
+    private static final String INVALID_TOKEN_REASON = "The paymentToken is invalid";
+    private static final int FIRST_ATTEMPT = 1;
+
     private final PaymentRepository paymentRepository;
     private final PaymentAttemptRepository paymentAttemptRepository;
     private final InboxEventService inboxEventService;
     private final OutboxEventService outboxEventService;
-    private final ObjectMapper mapper;
+    private final IntegrationEventReader integrationEventReader;
+    private final PaymentEventFactory paymentEventFactory;
 
     public PaymentServiceImpl(
             PaymentRepository paymentRepository,
             PaymentAttemptRepository paymentAttemptRepository,
             InboxEventService inboxEventService,
             OutboxEventService outboxEventService,
-            ObjectMapper mapper
+            IntegrationEventReader integrationEventReader,
+            PaymentEventFactory paymentEventFactory
     ) {
         this.paymentRepository = paymentRepository;
         this.paymentAttemptRepository = paymentAttemptRepository;
         this.inboxEventService = inboxEventService;
         this.outboxEventService = outboxEventService;
-        this.mapper = mapper;
+        this.integrationEventReader = integrationEventReader;
+        this.paymentEventFactory = paymentEventFactory;
     }
 
     @Override
     public void process(String rawEvent) {
-        IntegrationEventDto event = this.readEvent(rawEvent);
-        log.info("action=event_received eventType={} eventId={} correlationId={} orderId={} producer={}", event.eventType(), event.eventId(), event.correlationId(), event.aggregateId(), event.producer());
+        IntegrationEventDto event = this.integrationEventReader.read(rawEvent);
 
-        try {
-            this.processEvent(event);
-        } catch (RuntimeException exception) {
-            log.error("action=event_processing_failed eventType={} eventId={} correlationId={} orderId={} exceptionType={} errorMessage=\"{}\"", event.eventType(), event.eventId(), event.correlationId(), event.aggregateId(), exception.getClass().getSimpleName(), exception.getMessage(), exception);
-            throw exception;
-        }
-    }
-
-    private IntegrationEventDto readEvent(String rawEvent) {
-        try {
-            return this.mapper.readValue(rawEvent, IntegrationEventDto.class);
-        } catch (Exception exception) {
-            log.error("action=event_deserialization_failed message=Invalid_Kafka_event", exception);
-            throw new CustomNonRetryableKafkaException(ErrorCodeEnum.INVALID_EVENT, exception);
-        }
-    }
-
-    private void processEvent(IntegrationEventDto event) {
-
-        if (this.shouldIgnore(event)) {
-            log.info("action=event_ignored reason=unsupported_or_already_processed eventType={} eventId={} correlationId={} orderId={}", event.eventType(), event.eventId(), event.correlationId(), event.aggregateId());
+        if (!this.isPendingPaymentRequest(event)) {
             return;
         }
-
-        if (this.paymentExists(event)) {
-            this.inboxEventService.register(event, "payment-processing-requests-topic");
-            log.info("action=event_ignored reason=payment_already_exists eventType={} eventId={} correlationId={} orderId={}", event.eventType(), event.eventId(), event.correlationId(), event.aggregateId());
-            return;
+        if (!this.paymentExists(event)) {
+            PaymentEntity paymentEntity = this.charge(event);
+            this.publishPaymentResult(event, paymentEntity);
         }
-
-        PaymentEntity paymentEntity = this.createPayment(event);
-        this.createPaymentAttempt(paymentEntity);
-        IntegrationEventDto paymentResultEvent = this.publishPaymentResult(event, paymentEntity);
-        this.inboxEventService.register(event, "payment-processing-requests-topic");
-        this.logPaymentResult(paymentResultEvent, paymentEntity);
+        this.inboxEventService.register(event, KafkaTopics.PAYMENT_PROCESSING_REQUESTS);
     }
 
-
-
-    private void logPaymentResult(IntegrationEventDto paymentResultEvent, PaymentEntity paymentEntity) {
-        if (paymentEntity.getStatus() == PaymentStatusEnum.FAILED) {
-            log.warn("action=payment_rejected eventType={} eventId={} correlationId={} orderId={} paymentId={} reason=\"{}\"", paymentResultEvent.eventType(), paymentResultEvent.eventId(), paymentResultEvent.correlationId(), paymentResultEvent.aggregateId(), paymentEntity.getPaymentId(), paymentEntity.getFailureReason());
-            return;
-        }
-
-        log.info("action=payment_approved eventType={} eventId={} correlationId={} orderId={} paymentId={}", paymentResultEvent.eventType(), paymentResultEvent.eventId(), paymentResultEvent.correlationId(), paymentResultEvent.aggregateId(), paymentEntity.getPaymentId());
-    }
-
-    private Boolean shouldIgnore(IntegrationEventDto event) {
+    private boolean isPendingPaymentRequest(IntegrationEventDto event) {
         boolean isPaymentRequest = EventTypeEnum.PAYMENT_REQUESTED.getValue().equals(event.eventType());
-        boolean wasProcessed = this.inboxEventService.wasAlreadyProcessed(event.eventId());
-        return !isPaymentRequest || wasProcessed;
+        return isPaymentRequest && !this.inboxEventService.wasAlreadyProcessed(event.eventId());
     }
 
-    private Boolean paymentExists(IntegrationEventDto event) {
-        Long orderId = Long.valueOf(event.aggregateId());
-        return this.paymentRepository.findByOrderId(orderId).isPresent();
+    // Un pedido se cobra una sola vez, aunque llegue otro PAYMENT_REQUESTED con distinto eventId.
+    private boolean paymentExists(IntegrationEventDto event) {
+        return this.paymentRepository.findByOrderId(Long.valueOf(event.aggregateId())).isPresent();
     }
 
-    private PaymentEntity createPayment(IntegrationEventDto event) {
-        PaymentEntity paymentEntity = this.buildPaymentEntity(event);
-        return this.paymentRepository.save(paymentEntity);
+    private PaymentEntity charge(IntegrationEventDto event) {
+        PaymentEntity paymentEntity = this.paymentRepository.save(this.buildPayment(event));
+        this.registerAttempt(paymentEntity);
+        return paymentEntity;
     }
 
-    private PaymentEntity buildPaymentEntity(IntegrationEventDto event) {
-        String paymentToken = event.payload().get("paymentToken").asText();
-        boolean approved = "TEST_APPROVED".equals(paymentToken);
-
-        PaymentStatusEnum status = approved
-                        ? PaymentStatusEnum.APPROVED
-                        : PaymentStatusEnum.FAILED;
-
-        String failureReason = approved
-                        ? null
-                        : "The paymentToken is invalid";
-
-        Long orderId = Long.valueOf(event.aggregateId());
-        Long customerId = event.payload().get("customerId").asLong();
-        BigDecimal amount = event.payload().get("amount").decimalValue();
-        String currency = event.payload().get("currency").asText();
+    private PaymentEntity buildPayment(IntegrationEventDto event) {
+        JsonNode payload = event.payload();
+        boolean approved = APPROVED_TEST_TOKEN.equals(payload.get("paymentToken").asText());
 
         return PaymentEntity.builder()
                 .paymentId(UUID.randomUUID().toString())
-                .orderId(orderId)
-                .customerId(customerId)
-                .amount(amount)
-                .currency(currency)
-                .status(status)
-                .failureReason(failureReason)
+                .orderId(Long.valueOf(event.aggregateId()))
+                .customerId(payload.get("customerId").asLong())
+                .amount(payload.get("amount").decimalValue())
+                .currency(payload.get("currency").asText())
+                .status(approved ? PaymentStatusEnum.APPROVED : PaymentStatusEnum.FAILED)
+                .failureReason(approved ? null : INVALID_TOKEN_REASON)
                 .createdAt(LocalDateTime.now())
                 .build();
     }
 
-    private void createPaymentAttempt(PaymentEntity paymentEntity) {
-        PaymentAttemptEntity paymentAttemptEntity = PaymentAttemptEntity.builder()
+    private void registerAttempt(PaymentEntity paymentEntity) {
+        this.paymentAttemptRepository.save(PaymentAttemptEntity.builder()
                 .paymentId(paymentEntity.getPaymentId())
-                .attemptNumber(1)
+                .attemptNumber(FIRST_ATTEMPT)
                 .result(paymentEntity.getStatus().name())
                 .errorMessage(paymentEntity.getFailureReason())
                 .createdAt(LocalDateTime.now())
-                .build();
-
-        this.paymentAttemptRepository.save(paymentAttemptEntity);
+                .build());
     }
 
-    private IntegrationEventDto publishPaymentResult(IntegrationEventDto event, PaymentEntity paymentEntity) {
-        EventTypeEnum eventType = paymentEntity.getStatus() == PaymentStatusEnum.APPROVED
+    private void publishPaymentResult(IntegrationEventDto paymentRequestedEvent, PaymentEntity paymentEntity) {
+        EventTypeEnum resultType = paymentEntity.getStatus() == PaymentStatusEnum.APPROVED
                 ? EventTypeEnum.PAYMENT_APPROVED
                 : EventTypeEnum.PAYMENT_FAILED;
-
         Map<String, Object> mapPayload = Map.of("paymentId", paymentEntity.getPaymentId());
 
-        IntegrationEventDto resultEvent = IntegrationEventDto.builder()
-                .eventId(UUID.randomUUID().toString())
-                .eventType(eventType.getValue())
-                .eventVersion(1)
-                .aggregateId(event.aggregateId())
-                .correlationId(event.correlationId())
-                .previousEventId(event.eventId())
-                .timestamp(LocalDateTime.now())
-                .producer("payment-service")
-                .payload(this.mapper.valueToTree(mapPayload))
-                .build();
-
-        this.outboxEventService.enqueue("payment-processing-results-topic", resultEvent);
-        return resultEvent;
+        IntegrationEventDto resultEvent = this.paymentEventFactory.build(resultType, paymentRequestedEvent, mapPayload);
+        this.outboxEventService.enqueue(KafkaTopics.PAYMENT_PROCESSING_RESULTS, resultEvent);
     }
 
 }
