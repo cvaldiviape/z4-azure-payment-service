@@ -72,20 +72,23 @@ public class PaymentServiceImpl implements PaymentService {
 
     // Un pedido se cobra una sola vez, aunque llegue otro PAYMENT_REQUESTED con distinto eventId.
     private boolean paymentExists(IntegrationEventDto event) {
-        return this.paymentRepository.findByOrderId(Long.valueOf(event.aggregateId())).isPresent();
+        Long orderId = Long.valueOf(event.aggregateId());
+
+        return this.paymentRepository.findByOrderId(orderId).isPresent();
     }
 
     private PaymentEntity charge(IntegrationEventDto event) {
-        PaymentEntity paymentEntity = this.paymentRepository.save(this.buildPayment(event));
-        this.registerAttempt(paymentEntity);
+        PaymentEntity paymentEntity = this.createPayment(event);
+        this.createPaymentAttempt(paymentEntity);
         return paymentEntity;
     }
 
-    private PaymentEntity buildPayment(IntegrationEventDto event) {
+    private PaymentEntity createPayment(IntegrationEventDto event) {
         JsonNode payload = event.payload();
-        boolean approved = APPROVED_TEST_TOKEN.equals(payload.get("paymentToken").asText());
+        String paymentToken = payload.get("paymentToken").asText();
+        boolean approved = APPROVED_TEST_TOKEN.equals(paymentToken);
 
-        return PaymentEntity.builder()
+        PaymentEntity paymentEntity = PaymentEntity.builder()
                 .paymentId(UUID.randomUUID().toString())
                 .orderId(Long.valueOf(event.aggregateId()))
                 .customerId(payload.get("customerId").asLong())
@@ -95,16 +98,20 @@ public class PaymentServiceImpl implements PaymentService {
                 .failureReason(approved ? null : INVALID_TOKEN_REASON)
                 .createdAt(LocalDateTime.now())
                 .build();
+
+        return this.paymentRepository.save(paymentEntity);
     }
 
-    private void registerAttempt(PaymentEntity paymentEntity) {
-        this.paymentAttemptRepository.save(PaymentAttemptEntity.builder()
+    private void createPaymentAttempt(PaymentEntity paymentEntity) {
+        PaymentAttemptEntity paymentAttemptEntity = PaymentAttemptEntity.builder()
                 .paymentId(paymentEntity.getPaymentId())
                 .attemptNumber(FIRST_ATTEMPT)
                 .result(paymentEntity.getStatus().name())
                 .errorMessage(paymentEntity.getFailureReason())
                 .createdAt(LocalDateTime.now())
-                .build());
+                .build();
+
+        this.paymentAttemptRepository.save(paymentAttemptEntity);
     }
 
     private void publishPaymentResult(IntegrationEventDto paymentRequestedEvent, PaymentEntity paymentEntity) {
@@ -114,6 +121,7 @@ public class PaymentServiceImpl implements PaymentService {
         Map<String, Object> mapPayload = Map.of("paymentId", paymentEntity.getPaymentId());
 
         IntegrationEventDto resultEvent = this.paymentEventFactory.build(resultType, paymentRequestedEvent, mapPayload);
+
         this.outboxEventService.enqueue(KafkaTopics.PAYMENT_PROCESSING_RESULTS, resultEvent);
     }
 
