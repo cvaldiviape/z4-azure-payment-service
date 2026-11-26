@@ -11,13 +11,13 @@ import lombok.*;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class PaymentAttemptEntity {
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-  private String paymentId;
-  private Integer attemptNumber;
-  private String result;
-  private String errorMessage;
-  private LocalDateTime createdAt;
+    private String paymentId;
+    private Integer attemptNumber;
+    private String result;
+    private String errorMessage;
+    private LocalDateTime createdAt;
 }

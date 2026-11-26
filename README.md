@@ -4,12 +4,12 @@ Servicio responsable de simular el procesamiento de pagos de la Saga de compra.
 
 ## Configuración local
 
-| Propiedad | Valor predeterminado |
-|---|---|
-| Puerto HTTP | `8084` |
-| PostgreSQL | `localhost:5436/payments_db` |
-| Kafka | `localhost:9092` |
-| Consumer group ID | `payment-request-consumer-group-id` |
+| #   | Propiedad         | Valor predeterminado                |
+|-----|-------------------|-------------------------------------|
+| 1   | Puerto HTTP       | `8084`                              |
+| 2   | PostgreSQL        | `localhost:5436/payments_db`        |
+| 3   | Kafka             | `localhost:9092`                    |
+| 4   | Consumer group ID | `payment-request-consumer-group-id` |
 
 Flyway crea y modifica el esquema mediante `db/migration`. Hibernate utiliza `ddl-auto: validate` únicamente para comprobar que las entidades coincidan con las tablas; no crea ni altera la estructura.
 
